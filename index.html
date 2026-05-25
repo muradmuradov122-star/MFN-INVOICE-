@@ -817,6 +817,14 @@ input, select, textarea, button {
             <label for="buyer-contact">Əlaqə</label>
             <input type="text" id="buyer-contact" placeholder="+994 50 000 00 00" oninput="updatePreview()">
           </div>
+          <div class="field-row" id="buyer-bank-row" style="display:none;">
+            <label for="buyer-bank">Bank</label>
+            <input type="text" id="buyer-bank" placeholder="ABB, Kapital Bank..." oninput="updatePreview()">
+          </div>
+          <div class="field-row" id="buyer-iban-row" style="display:none;">
+            <label for="buyer-iban">Hesab (IBAN)</label>
+            <input type="text" id="buyer-iban" placeholder="AZ00XXXX0000000000000000" oninput="updatePreview()">
+          </div>
         </div>
       </div>
 
@@ -1175,9 +1183,12 @@ function onBuyerTypeChange() {
   const vatDefaults = { 'Hüquqi şəxs': 18, 'Sahibkar': 4, 'Fiziki şəxs': 0 };
   const vatInput = document.getElementById('vat-rate-input');
   if (vatInput) vatInput.value = vatDefaults[type] ?? 0;
-  // Hide VÖEN row for individuals
+  // Hide VÖEN, Bank, IBAN rows for individuals
   const voenRow = document.getElementById('buyer-voen-row');
   voenRow.style.display = (type === 'Fiziki şəxs') ? 'none' : '';
+  const isBusiness = (type === 'Hüquqi şəxs' || type === 'Sahibkar');
+  document.getElementById('buyer-bank-row').style.display = isBusiness ? '' : 'none';
+  document.getElementById('buyer-iban-row').style.display = isBusiness ? '' : 'none';
   // Hide VAT row entirely for individuals
   const vatRow = document.getElementById('form-vat-row');
   if (vatRow) vatRow.style.display = (type === 'Fiziki şəxs') ? 'none' : '';
@@ -1503,6 +1514,8 @@ function updatePreview() {
   if (buyerType !== 'Fiziki şəxs' && sv('buyer-voen')) buyerDetails += `<strong>VÖEN:</strong> ${sv('buyer-voen')}<br>`;
   if (sv('buyer-address')) buyerDetails += `<strong>Ünvan:</strong> ${sv('buyer-address')}<br>`;
   if (sv('buyer-contact')) buyerDetails += `<strong>Əlaqə:</strong> ${sv('buyer-contact')}<br>`;
+  if (sv('buyer-bank')) buyerDetails += `<strong>Bank:</strong> ${sv('buyer-bank')}<br>`;
+  if (sv('buyer-iban')) buyerDetails += `<strong>IBAN:</strong> ${sv('buyer-iban')}<br>`;
   document.getElementById('prev-buyer-details').innerHTML = buyerDetails;
 
   // Materials table
@@ -1612,6 +1625,8 @@ async function handleSave() {
     date: formatDate(document.getElementById('invoice-date').value),
     buyer_name: document.getElementById('buyer-name').value,
     buyer_voen: document.getElementById('buyer-voen').value,
+    buyer_bank: document.getElementById('buyer-bank').value,
+    buyer_iban: document.getElementById('buyer-iban').value,
     buyer_type: document.getElementById('buyer-type').value,
     delivery_date: formatDate(document.getElementById('delivery-date').value),
     payment_method: document.getElementById('payment-method').value,
@@ -1666,7 +1681,7 @@ function handleClear() {
   document.getElementById('invoice-date').value = new Date().toISOString().split('T')[0];
 
   // Clear buyer fields
-  ['buyer-name','buyer-voen','buyer-address','buyer-contact'].forEach(id => {
+  ['buyer-name','buyer-voen','buyer-address','buyer-contact','buyer-bank','buyer-iban'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
