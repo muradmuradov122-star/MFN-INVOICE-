@@ -1626,10 +1626,13 @@ async function handleSave() {
   };
 
   try {
+    // Use URLSearchParams to avoid CORS preflight (simple request)
+    const formData = new URLSearchParams();
+    formData.append('data', JSON.stringify(payload));
+
     const resp = await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' }
+      body: formData
     });
     const data = await resp.json();
     if (data.status === 'ok') {
