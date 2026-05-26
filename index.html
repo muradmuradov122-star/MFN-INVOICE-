@@ -1185,6 +1185,17 @@ const PRODUCT_OPTIONS_HTML = PRODUCTS.map(p =>
 // ─── Seller field IDs (single source of truth) ───────────────────
 const SELLER_FIELDS = ['seller-voen', 'seller-address', 'seller-contact', 'seller-bank', 'seller-iban'];
 
+// ─── VAT defaults per buyer type ─────────────────────────────────
+const VAT_DEFAULTS = { 'Hüquqi şəxs': 18, 'Sahibkar': 4, 'Fiziki şəxs': 0 };
+
+// ─── Known payment terms (must match <select> option values) ─────
+const KNOWN_PAYMENT_TERMS = [
+  'Çatdırılmadan əvvəl – tam ödəniş',
+  'Çatdırılmadan sonra – tam ödəniş',
+  '50% avans, 50% çatdırılmadan sonra',
+  '30 gün müddətli ödəniş'
+];
+
 // ─── State ───────────────────────────────────────────────────────
 let invoiceCounter = parseInt(localStorage.getItem('mfn_invoice_counter') || '1');
 let rowId = 0;
@@ -1236,29 +1247,28 @@ function loadSeller() {
 
 // ─── Load Managers from Google Sheets ────────────────────────────
 async function loadManagers() {
+  const sel = document.getElementById('manager-name');
+  if (!sel || sel.dataset.loaded) return;
   try {
     const url = `${GOOGLE_SCRIPT_URL}?action=managers&token=${SECRET_TOKEN_CLIENT}`;
     const resp = await fetch(url);
     const data = await resp.json();
-    const sel = document.getElementById('manager-name');
-    if (!sel || data.status !== 'ok') return;
+    if (data.status !== 'ok') return;
     (data.managers || []).forEach(name => {
       if (!name) return;
       const opt = document.createElement('option');
       opt.value = name; opt.textContent = name;
       sel.appendChild(opt);
     });
+    sel.dataset.loaded = '1';
   } catch(e) { /* silently fail — manager can still select blank */ }
 }
 
 // ─── Buyer Type Change ────────────────────────────────────────────
 function onBuyerTypeChange() {
   const type = document.getElementById('buyer-type').value;
-  // Auto-fill VAT with default for this buyer type
-  const vatDefaults = { 'Hüquqi şəxs': 18, 'Sahibkar': 4, 'Fiziki şəxs': 0 };
   const vatInput = document.getElementById('vat-rate-input');
-  if (vatInput) vatInput.value = vatDefaults[type] ?? 0;
-  // Hide VAT row entirely for individuals
+  if (vatInput) vatInput.value = VAT_DEFAULTS[type] ?? 0;
   const vatRow = document.getElementById('form-vat-row');
   if (vatRow) vatRow.style.display = (type === 'Fiziki şəxs') ? 'none' : '';
   updatePreview();
@@ -1324,8 +1334,8 @@ function cancelEditMode() {
   resetFormSilent();
 }
 
-function resetFormSilent() {
-  // Reset without incrementing invoice counter
+// ─── Shared form reset (no counter increment, no toast) ──────────
+function resetFormFields() {
   document.getElementById('invoice-date').value = new Date().toISOString().split('T')[0];
   ['buyer-name','buyer-address','buyer-contact'].forEach(id => {
     const el = document.getElementById(id);
@@ -1336,7 +1346,7 @@ function resetFormSilent() {
   document.getElementById('materials-tbody').innerHTML = '';
   document.getElementById('material-cards').innerHTML = '';
   rowId = 0;
-  addRow();
+  addRow(true);   // silent — caller does final updatePreview()
   document.getElementById('delivery-date').value = '';
   document.getElementById('delivery-zone').value = 'baku';
   document.getElementById('delivery-fee').value = '0';
@@ -1349,6 +1359,10 @@ function resetFormSilent() {
   document.getElementById('manager-position').value = '';
   clearAlert();
   updatePreview();
+}
+
+function resetFormSilent() {
+  resetFormFields();
 }
 
 // ─── Search & Load Invoice ────────────────────────────────────────
@@ -1433,16 +1447,10 @@ function populateForm(inv) {
 
   // Payment terms
   const termsEl = document.getElementById('payment-terms');
-  const knownTerms = [
-    'Çatdırılmadan əvvəl – tam ödəniş',
-    'Çatdırılmadan sonra – tam ödəniş',
-    '50% avans, 50% çatdırılmadan sonra',
-    '30 gün müddətli ödəniş'
-  ];
   if (termsEl) {
     if (!inv.payment_terms || inv.payment_terms === '') {
       termsEl.value = '';
-    } else if (knownTerms.includes(inv.payment_terms)) {
+    } else if (KNOWN_PAYMENT_TERMS.includes(inv.payment_terms)) {
       termsEl.value = inv.payment_terms;
     } else {
       termsEl.value = '__other__';
@@ -1475,7 +1483,7 @@ function populateForm(inv) {
     const items = JSON.parse(inv.items_json_raw || '[]');
     if (items.length === 0) { addRow(); return; }
     items.forEach(item => {
-      addRow();
+      addRow(true); // silent — single updatePreview() at end
       const id = rowId;
       const sel = document.getElementById(`psel-${id}`);
       const pname = document.getElementById(`pname-${id}`);
@@ -1537,13 +1545,13 @@ function formatDate(isoDate) {
 }
 
 // ─── Add Material Row ─────────────────────────────────────────────
-function addRow() {
+function addRow(silent = false) {
   rowId++;
   const id = rowId;
   addTableRow(id);
   addCardRow(id);
   updateRowNumbers();
-  updatePreview();
+  if (!silent) updatePreview();
 }
 
 function addTableRow(id) {
@@ -1803,8 +1811,8 @@ function getRows() {
 }
 
 // ─── Update Totals ────────────────────────────────────────────────
-function updateTotals() {
-  const rows = getRows();
+function updateTotals(rows) {
+  if (!rows) rows = getRows();
   const subtotal = rows.reduce((s, r) => s + r.line_total, 0);
   const vatRate = getVatRate();
   const vatAmount = Math.round(subtotal * vatRate / 100 * 100) / 100;
@@ -1812,18 +1820,17 @@ function updateTotals() {
   const grandTotal = subtotal + vatAmount + deliveryFee;
   const buyerType = document.getElementById('buyer-type').value;
 
-  // Form totals
   document.getElementById('form-subtotal').textContent = formatAZN(subtotal) + ' AZN';
   document.getElementById('form-vat').textContent = formatAZN(vatAmount) + ' AZN';
   document.getElementById('form-grand').textContent = formatAZN(grandTotal) + ' AZN';
   document.getElementById('form-vat-row').style.display = buyerType === 'Fiziki şəxs' ? 'none' : '';
 
-  return { subtotal, vatRate, vatAmount, deliveryFee, grandTotal };
+  return { subtotal, vatRate, vatAmount, deliveryFee, grandTotal, rows };
 }
 
 // ─── Update Preview ───────────────────────────────────────────────
 function updatePreview() {
-  const { subtotal, vatRate, vatAmount, deliveryFee, grandTotal } = updateTotals();
+  const { subtotal, vatRate, vatAmount, deliveryFee, grandTotal, rows } = updateTotals();
   const buyerType = document.getElementById('buyer-type').value;
 
   // Header
@@ -1859,7 +1866,6 @@ function updatePreview() {
   document.getElementById('prev-buyer-details').innerHTML = buyerDetails;
 
   // Materials table
-  const rows = getRows();
   const hasDiscount = rows.some(r => r.discount > 0);
   const hasReason = rows.some(r => r.discount > 0 && r.discount_reason);
 
@@ -2041,43 +2047,10 @@ async function handleSave() {
 // ─── Clear Form ───────────────────────────────────────────────────
 function handleClear() {
   if (!confirm('Formu təmizləmək istədiyinizdən əminsinizmi?')) return;
-
-  // Increment counter
   invoiceCounter++;
   localStorage.setItem('mfn_invoice_counter', invoiceCounter);
   document.getElementById('invoice-number').value = generateInvoiceNumber();
-
-  // Reset date to today
-  document.getElementById('invoice-date').value = new Date().toISOString().split('T')[0];
-
-  // Clear buyer fields
-  ['buyer-name','buyer-address','buyer-contact'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  document.getElementById('buyer-type').value = 'Hüquqi şəxs';
-  onBuyerTypeChange();
-
-  // Clear material rows
-  document.getElementById('materials-tbody').innerHTML = '';
-  document.getElementById('material-cards').innerHTML = '';
-  rowId = 0;
-  addRow();
-
-  // Clear additional fields
-  document.getElementById('delivery-date').value = '';
-  document.getElementById('delivery-zone').value = 'baku';
-  document.getElementById('delivery-fee').value = '0';
-  document.getElementById('payment-method').value = '';
-  document.getElementById('payment-terms').value = '';
-  document.getElementById('payment-terms-custom').value = '';
-  document.getElementById('payment-terms-custom-row').style.display = 'none';
-  document.getElementById('notes').value = '';
-  document.getElementById('manager-name').value = '';
-  document.getElementById('manager-position').value = '';
-
-  clearAlert();
-  updatePreview();
+  resetFormFields();
   showToast('Form təmizləndi', 'success');
 }
 
@@ -2088,8 +2061,10 @@ function showToast(message, type = 'success') {
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => {
-    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
     toast.style.opacity = '0';
+    // Remove after fade (300 ms fallback if transitionend never fires)
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    setTimeout(() => toast.remove(), 400);
   }, 3100);
 }
 
