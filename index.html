@@ -749,7 +749,7 @@ input, select, textarea, button {
           <span>🔍 Mövcud sifarişi yüklə / redaktə et</span>
           <span class="acc-arrow">▼</span>
         </div>
-        <div class="section-body" id="load-invoice-body" style="display:none;">
+        <div class="section-body" id="load-invoice-body">
           <div class="field-row">
             <label for="search-invoice">Axtarış</label>
             <input type="text" id="search-invoice" placeholder="Sənəd nömrəsi və ya alıcı adı..." oninput="onSearchInput()">
@@ -773,7 +773,7 @@ input, select, textarea, button {
             </div>
           </div>
           <p class="field-hint warning">
-            ⚠️ Sənəd nömrəsi hər cihazda ayrıca saxlanılır. Bir neçə menecer fərqli telefonlardan istifadə edərsə, eyni nömrəli qaimə-fakturalar yarana bilər. Google Sheets-i yoxlayıb son nömrəni əl ilə düzəldin.
+            ℹ️ Sənəd nömrəsi Google Sheets-dən avtomatik alınır. İnternet olmadıqda müvəqqəti lokal nömrə göstərilir — saxlamadan əvvəl Sheets-i yoxlayın.
           </p>
         </div>
       </div>
@@ -805,6 +805,9 @@ input, select, textarea, button {
           <div class="field-row">
             <label for="seller-iban">Hesab (IBAN)</label>
             <input type="text" id="seller-iban" value="AZ90PAHA40060AZNHC0100751331" oninput="saveSeller(); updatePreview()">
+          </div>
+          <div class="field-row" style="text-align:right; padding-top:4px;">
+            <button type="button" onclick="resetSellerToDefaults()" style="font-size:0.75rem; padding:4px 12px; border:1px solid var(--gray-200); background:var(--gray-100); border-radius:4px; cursor:pointer; color:var(--gray-600);">↺ Standart dəyərlərə sıfırla</button>
           </div>
         </div>
       </div>
@@ -854,7 +857,7 @@ input, select, textarea, button {
                   <th style="min-width:60px;">Vahid</th>
                   <th style="min-width:70px;">Miqdar</th>
                   <th style="min-width:80px;">Qiymət (AZN)</th>
-                  <th style="min-width:60px;">End. %</th>
+                  <th style="min-width:60px;">Endirim</th>
                   <th style="min-width:90px;">Səbəb</th>
                   <th style="min-width:80px;">Yekun (AZN)</th>
                   <th></th>
@@ -1024,7 +1027,7 @@ input, select, textarea, button {
               <th>Vahid</th>
               <th>Miqdar</th>
               <th>Qiymət</th>
-              <th id="th-discount" style="display:none;">End.%</th>
+              <th id="th-discount" style="display:none;">Endirim</th>
               <th id="th-reason" style="display:none;">Səbəb</th>
               <th>Yekun (AZN)</th>
             </tr>
@@ -1096,8 +1099,8 @@ input, select, textarea, button {
 <!-- Mobile Sticky Buttons -->
 <div class="sticky-buttons">
   <button class="btn btn-primary" onclick="handlePrint()">🖨 Çap et</button>
-  <button class="btn btn-primary" onclick="handleSave()">💾 Sheets</button>
-  <button class="btn btn-danger" onclick="handleClear()">🗑 Təmizlə</button>
+  <button class="btn btn-primary" id="btn-save-mobile" onclick="handleSave()">💾 Sheets</button>
+  <button class="btn btn-danger" onclick="handleClear()">🗑 Sil</button>
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
@@ -1179,7 +1182,7 @@ const PRODUCT_OPTIONS_HTML = PRODUCTS.map(p =>
 ).join('');
 
 // ─── Seller field IDs (single source of truth) ───────────────────
-const SELLER_FIELDS = ['seller-voen', 'seller-address', 'seller-contact', 'seller-bank', 'seller-iban'];
+const SELLER_FIELDS = ['seller-name', 'seller-voen', 'seller-address', 'seller-contact', 'seller-bank', 'seller-iban'];
 
 // ─── VAT defaults per buyer type ─────────────────────────────────
 const VAT_DEFAULTS = { 'Hüquqi şəxs': 18, 'Sahibkar': 4, 'Fiziki şəxs': 0 };
@@ -1254,6 +1257,17 @@ function loadSeller() {
     const saved = localStorage.getItem(`mfn_seller_${id}`);
     el.value = (saved !== null && saved !== '') ? saved : (DEFAULT_SELLER[id] || '');
   });
+}
+
+function resetSellerToDefaults() {
+  if (!confirm('Satıcı məlumatlarını standart dəyərlərə sıfırlamaq istəyirsinizmi?')) return;
+  SELLER_FIELDS.forEach(id => {
+    localStorage.removeItem(`mfn_seller_${id}`);
+    const el = document.getElementById(id);
+    if (el) el.value = DEFAULT_SELLER[id] || '';
+  });
+  updatePreview();
+  showToast('Satıcı məlumatları sıfırlandı ✓', 'success');
 }
 
 // ─── Load Managers from Google Sheets ────────────────────────────
@@ -1341,8 +1355,9 @@ function enterEditMode(invoiceNumber) {
 function cancelEditMode() {
   currentEditInvoiceNumber = null;
   document.getElementById('edit-mode-banner').style.display = 'none';
-  document.getElementById('btn-save').innerHTML = '💾 Yadda saxla';
+  document.getElementById('btn-save').innerHTML = '💾 Sheets-ə yaz'; // Bug 9 fix
   resetFormSilent();
+  loadNextInvoiceNumber(); // Bug 8 fix: refresh server number after edit cancel
 }
 
 // ─── Shared form reset (no counter increment, no toast) ──────────
@@ -1441,7 +1456,18 @@ function populateForm(inv) {
   // Basic fields
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
   set('invoice-number',    inv.invoice_number);
-  set('invoice-date',      inv.date_iso || '');
+  // Bug 5 fix: handle both date_iso (string YYYY-MM-DD) and raw Date objects from API
+  let dateIso = inv.date_iso || '';
+  if (!dateIso && inv.date) {
+    try {
+      const d = new Date(inv.date);
+      if (!isNaN(d.getTime())) {
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+        dateIso = local.toISOString().split('T')[0];
+      }
+    } catch(e) {}
+  }
+  set('invoice-date', dateIso);
   set('buyer-name',        inv.buyer_name);
   set('buyer-address',     inv.buyer_address);
   set('buyer-contact',     inv.buyer_contact);
@@ -1759,6 +1785,7 @@ function syncFromCard(id) {
   if (cdiscType) {
     const t = document.getElementById(`disc-type-${id}`);
     if (t) t.value = cdiscType.value;
+    onDiscTypeChange(id); // Bug 15 fix: remove/restore max=100 constraint
   }
 
   calcRow(id);
@@ -1904,12 +1931,16 @@ function updatePreview() {
 
   // Preview Totals
   document.getElementById('prev-subtotal').textContent = formatAZN(subtotal) + ' AZN';
-  // Delivery fee row
+  // Delivery fee row — Bug 17 fix: show "Pulsuz" for Baku zone
   const dfRow = document.getElementById('prev-delivery-fee-row');
   const dfEl  = document.getElementById('prev-delivery-fee');
   if (dfRow && dfEl) {
+    const delivZone = document.getElementById('delivery-zone')?.value;
     if (deliveryFee > 0) {
       dfEl.textContent = formatAZN(deliveryFee) + ' AZN';
+      dfRow.style.display = '';
+    } else if (delivZone === 'baku') {
+      dfEl.textContent = 'Pulsuz';
       dfRow.style.display = '';
     } else {
       dfRow.style.display = 'none';
@@ -1956,7 +1987,15 @@ function escHtml(str) {
 
 // ─── Validation ───────────────────────────────────────────────────
 function validateForm() {
-  return []; // all fields are optional
+  const errors = [];
+  if (!document.getElementById('buyer-name').value.trim()) {
+    errors.push('Alıcının adını daxil edin');
+  }
+  const validRows = getRows().filter(r => r.name && r.name !== '— Seçin —' && r.qty > 0);
+  if (validRows.length === 0) {
+    errors.push('Ən azı bir material əlavə edin (materialın adı + miqdar > 0)');
+  }
+  return errors;
 }
 
 function showAlert(errors, type = 'error') {
@@ -1992,7 +2031,8 @@ async function handleSave() {
   btn.innerHTML = '⏳ Göndərilir...';
   btn.disabled = true;
 
-  const rows = getRows();
+  // Bug 10 fix: exclude placeholder/empty rows from payload
+  const rows = getRows().filter(r => r.name && r.name !== '— Seçin —');
   const { subtotal, vatRate, vatAmount, deliveryFee, grandTotal } = updateTotals();
 
   const payload = {
@@ -2038,6 +2078,8 @@ async function handleSave() {
         cancelEditMode();
       } else {
         showToast('Uğurla yazıldı ✓', 'success');
+        btn.innerHTML = origText;         // Bug 1 fix: restore button text
+        loadNextInvoiceNumber();          // Bug 2 fix: advance to next invoice number
       }
     } else {
       throw new Error(data.message || 'Server error');
