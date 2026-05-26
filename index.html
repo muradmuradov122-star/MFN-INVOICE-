@@ -738,6 +738,27 @@ input, select, textarea, button {
       <!-- Alert Box -->
       <div id="alert-box" class="alert" style="display:none;"></div>
 
+      <!-- ─── Edit Mode Banner ──────────────────────────────────── -->
+      <div id="edit-mode-banner" style="display:none; background:#fff3cd; border:1px solid #ffc107; padding:10px 16px; border-radius:6px; margin-bottom:12px; font-size:0.9rem;">
+        ✏️ <strong>Redaktə rejimi:</strong> <span id="edit-mode-inv-num"></span>
+        <button onclick="cancelEditMode()" style="float:right; font-size:0.8rem; padding:3px 8px; border:1px solid #ffc107; background:#fff; border-radius:4px; cursor:pointer;">✕ Ləğv et</button>
+      </div>
+
+      <!-- ─── Search Panel ───────────────────────────────────────── -->
+      <div class="form-section" id="load-invoice-panel">
+        <div class="section-header accordion-header" onclick="toggleSection(this)">
+          <span>🔍 Mövcud sifarişi yüklə / redaktə et</span>
+          <span class="acc-arrow">▼</span>
+        </div>
+        <div class="section-body" id="load-invoice-body" style="display:none;">
+          <div class="field-row">
+            <label for="search-invoice">Axtarış</label>
+            <input type="text" id="search-invoice" placeholder="Sənəd nömrəsi və ya alıcı adı..." oninput="onSearchInput()">
+          </div>
+          <div id="search-results" style="display:none; margin-top:8px;"></div>
+        </div>
+      </div>
+
       <!-- ─── Section 1: Invoice Meta ─────────────────────────── -->
       <div class="form-section">
         <div class="section-header">📄 Sənəd məlumatları</div>
@@ -805,10 +826,6 @@ input, select, textarea, button {
             <label for="buyer-name">Şirkət adı / Ad Soyad</label>
             <input type="text" id="buyer-name" placeholder="Müştərinin adı" oninput="updatePreview()">
           </div>
-          <div class="field-row" id="buyer-voen-row">
-            <label for="buyer-voen">VÖEN</label>
-            <input type="text" id="buyer-voen" placeholder="0987654321" oninput="updatePreview()">
-          </div>
           <div class="field-row">
             <label for="buyer-address">Ünvan</label>
             <input type="text" id="buyer-address" placeholder="Ünvan" oninput="updatePreview()">
@@ -816,14 +833,6 @@ input, select, textarea, button {
           <div class="field-row">
             <label for="buyer-contact">Əlaqə</label>
             <input type="text" id="buyer-contact" placeholder="+994 50 000 00 00" oninput="updatePreview()">
-          </div>
-          <div class="field-row" id="buyer-bank-row" style="display:none;">
-            <label for="buyer-bank">Bank</label>
-            <input type="text" id="buyer-bank" placeholder="ABB, Kapital Bank..." oninput="updatePreview()">
-          </div>
-          <div class="field-row" id="buyer-iban-row" style="display:none;">
-            <label for="buyer-iban">Hesab (IBAN)</label>
-            <input type="text" id="buyer-iban" placeholder="AZ00XXXX0000000000000000" oninput="updatePreview()">
           </div>
         </div>
       </div>
@@ -896,6 +905,18 @@ input, select, textarea, button {
             <input type="date" id="delivery-date" oninput="updatePreview()">
           </div>
           <div class="field-row">
+            <label for="delivery-zone">Çatdırılma bölgəsi</label>
+            <select id="delivery-zone" onchange="onDeliveryZoneChange()">
+              <option value="baku">Bakı şəhəri</option>
+              <option value="region">Bakı xarici / Rayon</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="delivery-fee">Çatdırılma haqqı (AZN)</label>
+            <input type="number" id="delivery-fee" min="0" step="0.01" value="0"
+                   placeholder="0.00" oninput="updateTotals(); updatePreview()">
+          </div>
+          <div class="field-row">
             <label for="payment-method">Ödəniş üsulu</label>
             <select id="payment-method" onchange="updatePreview()">
               <option value="">— Seçin —</option>
@@ -904,6 +925,21 @@ input, select, textarea, button {
               <option value="Kart">Kart</option>
               <option value="Digər">Digər</option>
             </select>
+          </div>
+          <div class="field-row">
+            <label for="payment-terms">Ödəniş şərtləri</label>
+            <select id="payment-terms" onchange="onPaymentTermsChange(); updatePreview()">
+              <option value="">— Seçin —</option>
+              <option value="Çatdırılmadan əvvəl – tam ödəniş">Çatdırılmadan əvvəl – tam ödəniş</option>
+              <option value="Çatdırılmadan sonra – tam ödəniş">Çatdırılmadan sonra – tam ödəniş</option>
+              <option value="50% avans, 50% çatdırılmadan sonra">50% avans, 50% çatdırılmadan sonra</option>
+              <option value="30 gün müddətli ödəniş">30 gün müddətli ödəniş</option>
+              <option value="__other__">Digər...</option>
+            </select>
+          </div>
+          <div class="field-row" id="payment-terms-custom-row" style="display:none;">
+            <label for="payment-terms-custom">Şərtlər (əl ilə)</label>
+            <input type="text" id="payment-terms-custom" placeholder="Ödəniş şərtlərini daxil edin..." oninput="updatePreview()">
           </div>
           <div class="field-row">
             <label for="notes">Qeydlər</label>
@@ -918,7 +954,9 @@ input, select, textarea, button {
         <div class="section-body">
           <div class="field-row">
             <label for="manager-name">Menecer adı</label>
-            <input type="text" id="manager-name" placeholder="Ad Soyad" oninput="updatePreview()">
+            <select id="manager-name" onchange="updatePreview()">
+              <option value="">— Seçin —</option>
+            </select>
           </div>
           <div class="field-row">
             <label for="manager-position">Vəzifə</label>
@@ -1009,6 +1047,10 @@ input, select, textarea, button {
           <span class="itl">Cəmi:</span>
           <span class="itv" id="prev-subtotal">0.00 AZN</span>
         </div>
+        <div class="inv-total-row" id="prev-delivery-fee-row" style="display:none;">
+          <span class="itl">Çatdırılma:</span>
+          <span class="itv" id="prev-delivery-fee">Pulsuz</span>
+        </div>
         <div class="inv-total-row" id="prev-vat-row">
           <span class="itl" id="prev-vat-label">ƏDV (18%):</span>
           <span class="itv" id="prev-vat">0.00 AZN</span>
@@ -1022,6 +1064,7 @@ input, select, textarea, button {
       <!-- Extra Info -->
       <div class="invoice-extra" id="prev-extra-section">
         <div id="prev-payment" style="display:none;"><strong>Ödəniş üsulu:</strong> <span id="prev-payment-val"></span></div>
+        <div id="prev-terms-row" style="display:none;"><strong>Ödəniş şərtləri:</strong> <span id="prev-terms-val"></span></div>
         <div id="prev-delivery" style="display:none;"><strong>Çatdırılma tarixi:</strong> <span id="prev-delivery-val"></span></div>
         <div id="prev-notes-row" style="display:none;"><strong>Qeydlər:</strong> <span id="prev-notes-val"></span></div>
       </div>
@@ -1112,6 +1155,17 @@ function doGet(e) {
 
 // ─── Configuration ───────────────────────────────────────────────
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxmjunos1oV2M-g-ggp3A9KK66SJF4rrNJqNzlWIDiwwQ1NIV9j9xBbAz8tOl3SkvZN/exec";
+const SECRET_TOKEN_CLIENT = 'mfn-2026-xK9p';
+
+// ─── Default Seller Data ──────────────────────────────────────────
+const DEFAULT_SELLER = {
+  'seller-name':    'MFN Tikinti Materialları',
+  'seller-voen':    '1701232511',
+  'seller-address': 'Bakı şəh., (AZ1005), Yusif Məmmədəliyev küçəsi, 13',
+  'seller-contact': '',
+  'seller-bank':    '"PAŞA Bank" ASC',
+  'seller-iban':    'AZ90PAHA40060AZNHC0100751331'
+};
 
 // ─── Product Presets ─────────────────────────────────────────────
 const PRODUCTS = [
@@ -1144,8 +1198,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const today = new Date();
   document.getElementById('invoice-date').value = today.toISOString().split('T')[0];
 
-  // Load seller fields from localStorage
+  // Load seller fields from localStorage (with defaults)
   loadSeller();
+
+  // Load managers dropdown from Google Sheets
+  loadManagers();
 
   // Add first row
   addRow();
@@ -1170,28 +1227,287 @@ function saveSeller() {
 
 function loadSeller() {
   SELLER_FIELDS.forEach(id => {
-    const saved = localStorage.getItem(`mfn_seller_${id}`);
     const el = document.getElementById(id);
-    if (saved && el) el.value = saved;
+    if (!el) return;
+    const saved = localStorage.getItem(`mfn_seller_${id}`);
+    el.value = (saved !== null && saved !== '') ? saved : (DEFAULT_SELLER[id] || '');
   });
+}
+
+// ─── Load Managers from Google Sheets ────────────────────────────
+async function loadManagers() {
+  try {
+    const url = `${GOOGLE_SCRIPT_URL}?action=managers&token=${SECRET_TOKEN_CLIENT}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const sel = document.getElementById('manager-name');
+    if (!sel || data.status !== 'ok') return;
+    (data.managers || []).forEach(name => {
+      if (!name) return;
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  } catch(e) { /* silently fail — manager can still select blank */ }
 }
 
 // ─── Buyer Type Change ────────────────────────────────────────────
 function onBuyerTypeChange() {
   const type = document.getElementById('buyer-type').value;
-  // Auto-fill VAT input with default for this buyer type
+  // Auto-fill VAT with default for this buyer type
   const vatDefaults = { 'Hüquqi şəxs': 18, 'Sahibkar': 4, 'Fiziki şəxs': 0 };
   const vatInput = document.getElementById('vat-rate-input');
   if (vatInput) vatInput.value = vatDefaults[type] ?? 0;
-  // Hide VÖEN, Bank, IBAN rows for individuals
-  const voenRow = document.getElementById('buyer-voen-row');
-  voenRow.style.display = (type === 'Fiziki şəxs') ? 'none' : '';
-  const isBusiness = (type === 'Hüquqi şəxs' || type === 'Sahibkar');
-  document.getElementById('buyer-bank-row').style.display = isBusiness ? '' : 'none';
-  document.getElementById('buyer-iban-row').style.display = isBusiness ? '' : 'none';
   // Hide VAT row entirely for individuals
   const vatRow = document.getElementById('form-vat-row');
   if (vatRow) vatRow.style.display = (type === 'Fiziki şəxs') ? 'none' : '';
+  updatePreview();
+}
+
+// ─── Delivery Zone ────────────────────────────────────────────────
+function onDeliveryZoneChange() {
+  const zone = document.getElementById('delivery-zone').value;
+  if (zone === 'baku') {
+    document.getElementById('delivery-fee').value = '0';
+  }
+  updateTotals();
+  updatePreview();
+}
+
+// ─── Payment Terms ────────────────────────────────────────────────
+function onPaymentTermsChange() {
+  const val = document.getElementById('payment-terms').value;
+  const customRow = document.getElementById('payment-terms-custom-row');
+  customRow.style.display = (val === '__other__') ? '' : 'none';
+  if (val !== '__other__') {
+    document.getElementById('payment-terms-custom').value = '';
+  }
+}
+
+function getPaymentTermsValue() {
+  const sel = document.getElementById('payment-terms');
+  if (!sel) return '';
+  if (sel.value === '__other__') {
+    return (document.getElementById('payment-terms-custom')?.value || '').trim();
+  }
+  return sel.value;
+}
+
+// ─── Discount Type ────────────────────────────────────────────────
+function onDiscTypeChange(id) {
+  // sync table → card
+  const tableType = document.getElementById(`disc-type-${id}`)?.value || 'percent';
+  const cardType  = document.getElementById(`cdisc-type-${id}`);
+  if (cardType) cardType.value = tableType;
+  // remove max="100" constraint when AZN type
+  const discEl = document.getElementById(`disc-${id}`);
+  if (discEl) {
+    if (tableType === 'amount') discEl.removeAttribute('max');
+    else discEl.setAttribute('max', '100');
+  }
+}
+
+// ─── Edit Mode ────────────────────────────────────────────────────
+let currentEditInvoiceNumber = null;
+
+function enterEditMode(invoiceNumber) {
+  currentEditInvoiceNumber = invoiceNumber;
+  document.getElementById('edit-mode-banner').style.display = '';
+  document.getElementById('edit-mode-inv-num').textContent = invoiceNumber;
+  document.getElementById('btn-save').innerHTML = '💾 Yenilə';
+}
+
+function cancelEditMode() {
+  currentEditInvoiceNumber = null;
+  document.getElementById('edit-mode-banner').style.display = 'none';
+  document.getElementById('btn-save').innerHTML = '💾 Yadda saxla';
+  resetFormSilent();
+}
+
+function resetFormSilent() {
+  // Reset without incrementing invoice counter
+  document.getElementById('invoice-date').value = new Date().toISOString().split('T')[0];
+  ['buyer-name','buyer-address','buyer-contact'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('buyer-type').value = 'Hüquqi şəxs';
+  onBuyerTypeChange();
+  document.getElementById('materials-tbody').innerHTML = '';
+  document.getElementById('material-cards').innerHTML = '';
+  rowId = 0;
+  addRow();
+  document.getElementById('delivery-date').value = '';
+  document.getElementById('delivery-zone').value = 'baku';
+  document.getElementById('delivery-fee').value = '0';
+  document.getElementById('payment-method').value = '';
+  document.getElementById('payment-terms').value = '';
+  document.getElementById('payment-terms-custom').value = '';
+  document.getElementById('payment-terms-custom-row').style.display = 'none';
+  document.getElementById('notes').value = '';
+  document.getElementById('manager-name').value = '';
+  document.getElementById('manager-position').value = '';
+  clearAlert();
+  updatePreview();
+}
+
+// ─── Search & Load Invoice ────────────────────────────────────────
+let searchTimer = null;
+
+function onSearchInput() {
+  clearTimeout(searchTimer);
+  const q = document.getElementById('search-invoice').value.trim();
+  const box = document.getElementById('search-results');
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  searchTimer = setTimeout(() => fetchInvoiceSearch(q), 400);
+}
+
+async function fetchInvoiceSearch(q) {
+  const box = document.getElementById('search-results');
+  box.innerHTML = '<em style="color:var(--gray-400)">Axtarılır...</em>';
+  box.style.display = '';
+  try {
+    const url = `${GOOGLE_SCRIPT_URL}?action=search&q=${encodeURIComponent(q)}&token=${SECRET_TOKEN_CLIENT}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    showSearchResults(data.results || []);
+  } catch(e) {
+    box.innerHTML = '<em style="color:var(--danger)">Xəta baş verdi</em>';
+  }
+}
+
+function showSearchResults(results) {
+  const box = document.getElementById('search-results');
+  if (!results.length) {
+    box.innerHTML = '<em style="color:var(--gray-400)">Nəticə tapılmadı</em>';
+    box.style.display = '';
+    return;
+  }
+  box.innerHTML = results.map(r =>
+    `<div class="search-result-item" data-invoice="${escHtml(r.invoice_number)}"
+          style="padding:8px 10px; border:1px solid var(--gray-200); border-radius:4px;
+                 margin-bottom:6px; cursor:pointer; background:var(--white);"
+          onmouseover="this.style.background='var(--gray-100)'"
+          onmouseout="this.style.background='var(--white)'"
+          onclick="loadInvoice('${escHtml(r.invoice_number)}')">
+       <strong>${escHtml(r.invoice_number)}</strong> — ${escHtml(r.buyer_name)} — ${escHtml(String(r.date))}
+     </div>`
+  ).join('');
+  box.style.display = '';
+}
+
+async function loadInvoice(invoiceNumber) {
+  showToast('Yüklənir...', 'success');
+  try {
+    const url = `${GOOGLE_SCRIPT_URL}?action=get&invoice_number=${encodeURIComponent(invoiceNumber)}&token=${SECRET_TOKEN_CLIENT}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.status !== 'ok') throw new Error(data.message || 'Not found');
+    populateForm(data.invoice);
+    enterEditMode(invoiceNumber);
+    document.getElementById('search-results').style.display = 'none';
+    document.getElementById('search-invoice').value = '';
+  } catch(e) {
+    showToast('Yüklənmədi: ' + e.message, 'error');
+  }
+}
+
+function populateForm(inv) {
+  // Basic fields
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('invoice-number',    inv.invoice_number);
+  set('invoice-date',      inv.date_iso || '');
+  set('buyer-name',        inv.buyer_name);
+  set('buyer-address',     inv.buyer_address);
+  set('buyer-contact',     inv.buyer_contact);
+  set('buyer-type',        inv.buyer_type || 'Hüquqi şəxs');
+  set('delivery-date',     inv.delivery_date_iso || '');
+  set('delivery-fee',      inv.delivery_fee || '0');
+  set('payment-method',    inv.payment_method);
+  set('notes',             inv.notes);
+  set('manager-position',  inv.manager_position);
+
+  // Delivery zone
+  const zoneEl = document.getElementById('delivery-zone');
+  if (zoneEl) zoneEl.value = (inv.delivery_zone || '').includes('Rayon') ? 'region' : 'baku';
+
+  // Payment terms
+  const termsEl = document.getElementById('payment-terms');
+  const knownTerms = [
+    'Çatdırılmadan əvvəl – tam ödəniş',
+    'Çatdırılmadan sonra – tam ödəniş',
+    '50% avans, 50% çatdırılmadan sonra',
+    '30 gün müddətli ödəniş'
+  ];
+  if (termsEl) {
+    if (!inv.payment_terms || inv.payment_terms === '') {
+      termsEl.value = '';
+    } else if (knownTerms.includes(inv.payment_terms)) {
+      termsEl.value = inv.payment_terms;
+    } else {
+      termsEl.value = '__other__';
+      set('payment-terms-custom', inv.payment_terms);
+      document.getElementById('payment-terms-custom-row').style.display = '';
+    }
+  }
+
+  // Manager dropdown
+  const mgSel = document.getElementById('manager-name');
+  if (mgSel && inv.manager) {
+    // Try to select existing option; if not found add it temporarily
+    let found = false;
+    for (let opt of mgSel.options) { if (opt.value === inv.manager) { found = true; break; } }
+    if (!found) {
+      const opt = document.createElement('option');
+      opt.value = inv.manager; opt.textContent = inv.manager;
+      mgSel.appendChild(opt);
+    }
+    mgSel.value = inv.manager;
+  }
+
+  onBuyerTypeChange();
+
+  // Materials
+  document.getElementById('materials-tbody').innerHTML = '';
+  document.getElementById('material-cards').innerHTML = '';
+  rowId = 0;
+  try {
+    const items = JSON.parse(inv.items_json_raw || '[]');
+    if (items.length === 0) { addRow(); return; }
+    items.forEach(item => {
+      addRow();
+      const id = rowId;
+      const sel = document.getElementById(`psel-${id}`);
+      const pname = document.getElementById(`pname-${id}`);
+      // Check if product is in preset list
+      let inPreset = false;
+      if (sel) {
+        for (let opt of sel.options) { if (opt.value === item.name) { inPreset = true; break; } }
+      }
+      if (inPreset && sel) {
+        sel.value = item.name;
+        onProductSelect(id);
+      } else if (sel && pname) {
+        sel.style.display = 'none';
+        pname.style.display = '';
+        pname.value = item.name || '';
+      }
+      const set2 = (sfx, val) => { const el = document.getElementById(`${sfx}-${id}`); if (el) el.value = val || ''; };
+      set2('unit',  item.unit);
+      set2('qty',   item.qty);
+      set2('price', item.price);
+      set2('disc',  item.discount || '0');
+      // Discount type
+      const dtEl = document.getElementById(`disc-type-${id}`);
+      if (dtEl) dtEl.value = item.discount_type || 'percent';
+      const cdtEl = document.getElementById(`cdisc-type-${id}`);
+      if (cdtEl) cdtEl.value = item.discount_type || 'percent';
+      set2('reason', item.discount_reason);
+      onDiscTypeChange(id);
+      calcRow(id);
+    });
+  } catch(e) { addRow(); }
+
   updatePreview();
 }
 
@@ -1245,7 +1561,13 @@ function addTableRow(id) {
     <td><input type="text" id="unit-${id}" placeholder="m²" style="width:56px;" oninput="updatePreview()"></td>
     <td><input type="number" id="qty-${id}" min="0" step="0.01" placeholder="0" style="width:66px;" oninput="calcRow(${id}); updatePreview()"></td>
     <td><input type="number" id="price-${id}" min="0" step="0.01" placeholder="0.00" style="width:78px;" oninput="calcRow(${id}); updatePreview()"></td>
-    <td><input type="number" id="disc-${id}" min="0" max="100" step="0.1" placeholder="0" style="width:52px;" oninput="toggleDiscReason(${id}); calcRow(${id}); updatePreview()"></td>
+    <td style="white-space:nowrap;">
+      <input type="number" id="disc-${id}" min="0" step="0.1" placeholder="0" style="width:42px;" oninput="toggleDiscReason(${id}); calcRow(${id}); updatePreview()">
+      <select id="disc-type-${id}" style="width:48px; padding:1px 2px; font-size:0.78rem;" onchange="onDiscTypeChange(${id}); calcRow(${id}); updatePreview()">
+        <option value="percent">%</option>
+        <option value="amount">AZN</option>
+      </select>
+    </td>
     <td><input type="text" id="reason-${id}" placeholder="Səbəb" style="width:84px; display:none;" oninput="updatePreview()"></td>
     <td><input type="number" id="total-${id}" readonly placeholder="0.00" style="width:78px; background:var(--gray-100); font-weight:600;"></td>
     <td class="action-col"><button class="btn-remove-row" onclick="removeRow(${id})" title="Sil">✕</button></td>
@@ -1286,8 +1608,14 @@ function addCardRow(id) {
         <input type="number" id="cprice-${id}" min="0" step="0.01" placeholder="0.00" oninput="syncFromCard(${id})">
       </div>
       <div class="material-card-field">
-        <label>Endirim (%)</label>
-        <input type="number" id="cdisc-${id}" min="0" max="100" step="0.1" placeholder="0" oninput="syncFromCard(${id})">
+        <label id="cdisc-label-${id}">Endirim</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" id="cdisc-${id}" min="0" step="0.1" placeholder="0" style="flex:1;" oninput="syncFromCard(${id})">
+          <select id="cdisc-type-${id}" style="width:56px;" onchange="syncFromCard(${id})">
+            <option value="percent">%</option>
+            <option value="amount">AZN</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="material-card-field" id="creason-wrap-${id}" style="display:none;">
@@ -1407,6 +1735,12 @@ function syncFromCard(id) {
   const cwrap = document.getElementById(`creason-wrap-${id}`);
   if (cwrap) cwrap.style.display = discVal > 0 ? '' : 'none';
   if (cdisc) { const t = document.getElementById(`disc-${id}`); if(t) t.value = cdisc.value; }
+  // sync discount type card → table
+  const cdiscType = document.getElementById(`cdisc-type-${id}`);
+  if (cdiscType) {
+    const t = document.getElementById(`disc-type-${id}`);
+    if (t) t.value = cdiscType.value;
+  }
 
   calcRow(id);
   updatePreview();
@@ -1426,10 +1760,17 @@ function toggleDiscReason(id) {
 
 // ─── Row Calculation ──────────────────────────────────────────────
 function calcRow(id) {
-  const qty = parseFloat(document.getElementById(`qty-${id}`)?.value) || 0;
-  const price = parseFloat(document.getElementById(`price-${id}`)?.value) || 0;
-  const discount = parseFloat(document.getElementById(`disc-${id}`)?.value) || 0;
-  const lineTotal = Math.round(qty * price * (1 - discount / 100) * 100) / 100;
+  const qty      = parseFloat(document.getElementById(`qty-${id}`)?.value)       || 0;
+  const price    = parseFloat(document.getElementById(`price-${id}`)?.value)     || 0;
+  const discount = parseFloat(document.getElementById(`disc-${id}`)?.value)      || 0;
+  const discType = document.getElementById(`disc-type-${id}`)?.value || 'percent';
+
+  let lineTotal;
+  if (discType === 'amount') {
+    lineTotal = Math.max(0, Math.round((qty * price - discount) * 100) / 100);
+  } else {
+    lineTotal = Math.round(qty * price * (1 - discount / 100) * 100) / 100;
+  }
 
   const totalEl = document.getElementById(`total-${id}`);
   if (totalEl) totalEl.value = lineTotal.toFixed(2);
@@ -1452,10 +1793,11 @@ function getRows() {
     const unit = (document.getElementById(`unit-${id}`) || {}).value || '';
     const qty = parseFloat((document.getElementById(`qty-${id}`) || {}).value) || 0;
     const price = parseFloat((document.getElementById(`price-${id}`) || {}).value) || 0;
-    const discount = parseFloat((document.getElementById(`disc-${id}`) || {}).value) || 0;
-    const reason = (document.getElementById(`reason-${id}`) || {}).value || '';
+    const discount  = parseFloat((document.getElementById(`disc-${id}`) || {}).value) || 0;
+    const discType  = (document.getElementById(`disc-type-${id}`) || {}).value || 'percent';
+    const reason    = (document.getElementById(`reason-${id}`) || {}).value || '';
     const lineTotal = parseFloat(document.getElementById(`total-${id}`)?.value) || 0;
-    rows.push({ id, name, unit, qty, price, discount, discount_reason: reason, line_total: lineTotal });
+    rows.push({ id, name, unit, qty, price, discount, discount_type: discType, discount_reason: reason, line_total: lineTotal });
   });
   return rows;
 }
@@ -1466,7 +1808,8 @@ function updateTotals() {
   const subtotal = rows.reduce((s, r) => s + r.line_total, 0);
   const vatRate = getVatRate();
   const vatAmount = Math.round(subtotal * vatRate / 100 * 100) / 100;
-  const grandTotal = subtotal + vatAmount;
+  const deliveryFee = parseFloat(document.getElementById('delivery-fee')?.value) || 0;
+  const grandTotal = subtotal + vatAmount + deliveryFee;
   const buyerType = document.getElementById('buyer-type').value;
 
   // Form totals
@@ -1475,12 +1818,12 @@ function updateTotals() {
   document.getElementById('form-grand').textContent = formatAZN(grandTotal) + ' AZN';
   document.getElementById('form-vat-row').style.display = buyerType === 'Fiziki şəxs' ? 'none' : '';
 
-  return { subtotal, vatRate, vatAmount, grandTotal };
+  return { subtotal, vatRate, vatAmount, deliveryFee, grandTotal };
 }
 
 // ─── Update Preview ───────────────────────────────────────────────
 function updatePreview() {
-  const { subtotal, vatRate, vatAmount, grandTotal } = updateTotals();
+  const { subtotal, vatRate, vatAmount, deliveryFee, grandTotal } = updateTotals();
   const buyerType = document.getElementById('buyer-type').value;
 
   // Header
@@ -1511,11 +1854,8 @@ function updatePreview() {
   const buyerName = sv('buyer-name') || '—';
   document.getElementById('prev-buyer-name').textContent = buyerName;
   let buyerDetails = `<strong>Müştəri tipi:</strong> ${buyerType}<br>`;
-  if (buyerType !== 'Fiziki şəxs' && sv('buyer-voen')) buyerDetails += `<strong>VÖEN:</strong> ${sv('buyer-voen')}<br>`;
   if (sv('buyer-address')) buyerDetails += `<strong>Ünvan:</strong> ${sv('buyer-address')}<br>`;
   if (sv('buyer-contact')) buyerDetails += `<strong>Əlaqə:</strong> ${sv('buyer-contact')}<br>`;
-  if (sv('buyer-bank')) buyerDetails += `<strong>Bank:</strong> ${sv('buyer-bank')}<br>`;
-  if (sv('buyer-iban')) buyerDetails += `<strong>IBAN:</strong> ${sv('buyer-iban')}<br>`;
   document.getElementById('prev-buyer-details').innerHTML = buyerDetails;
 
   // Materials table
@@ -1538,7 +1878,7 @@ function updatePreview() {
         <td style="text-align:center;">${escHtml(r.unit)}</td>
         <td style="text-align:right;">${r.qty > 0 ? r.qty : '—'}</td>
         <td style="text-align:right;">${r.price > 0 ? formatAZN(r.price) : '—'}</td>
-        ${hasDiscount ? `<td style="text-align:center;">${r.discount > 0 ? `<span class="discount-badge">${r.discount}%</span>` : '—'}</td>` : ''}
+        ${hasDiscount ? `<td style="text-align:center;">${r.discount > 0 ? `<span class="discount-badge">${r.discount_type === 'amount' ? r.discount.toFixed(2) + ' AZN' : r.discount + '%'}</span>` : '—'}</td>` : ''}
         ${hasReason ? `<td style="text-align:left; font-size:0.72rem; color:var(--gray-600);">${escHtml(r.discount_reason)}</td>` : ''}
         <td style="font-weight:700; color:var(--navy);">${formatAZN(r.line_total)}</td>
       </tr>`;
@@ -1547,6 +1887,17 @@ function updatePreview() {
 
   // Preview Totals
   document.getElementById('prev-subtotal').textContent = formatAZN(subtotal) + ' AZN';
+  // Delivery fee row
+  const dfRow = document.getElementById('prev-delivery-fee-row');
+  const dfEl  = document.getElementById('prev-delivery-fee');
+  if (dfRow && dfEl) {
+    if (deliveryFee > 0) {
+      dfEl.textContent = formatAZN(deliveryFee) + ' AZN';
+      dfRow.style.display = '';
+    } else {
+      dfRow.style.display = 'none';
+    }
+  }
   document.getElementById('prev-vat-label').textContent = `ƏDV (${vatRate}%):`;
   document.getElementById('prev-vat').textContent = formatAZN(vatAmount) + ' AZN';
   document.getElementById('prev-grand').textContent = formatAZN(grandTotal) + ' AZN';
@@ -1556,10 +1907,17 @@ function updatePreview() {
   const payMethod = sv('payment-method');
   const delivDate = formatDate(sv('delivery-date'));
   const notes = sv('notes');
+  const terms = getPaymentTermsValue();
 
   const payRow = document.getElementById('prev-payment');
   payRow.style.display = payMethod ? '' : 'none';
   document.getElementById('prev-payment-val').textContent = payMethod;
+
+  const termsRow = document.getElementById('prev-terms-row');
+  if (termsRow) {
+    termsRow.style.display = terms ? '' : 'none';
+    document.getElementById('prev-terms-val').textContent = terms;
+  }
 
   const delRow = document.getElementById('prev-delivery');
   delRow.style.display = delivDate ? '' : 'none';
@@ -1618,28 +1976,34 @@ async function handleSave() {
   btn.disabled = true;
 
   const rows = getRows();
-  const { subtotal, vatRate, vatAmount, grandTotal } = updateTotals();
+  const { subtotal, vatRate, vatAmount, deliveryFee, grandTotal } = updateTotals();
 
   const payload = {
-    invoice_number: document.getElementById('invoice-number').value,
-    date: formatDate(document.getElementById('invoice-date').value),
-    buyer_name: document.getElementById('buyer-name').value,
-    buyer_voen: document.getElementById('buyer-voen').value,
-    buyer_bank: document.getElementById('buyer-bank').value,
-    buyer_iban: document.getElementById('buyer-iban').value,
-    buyer_type: document.getElementById('buyer-type').value,
-    delivery_date: formatDate(document.getElementById('delivery-date').value),
-    payment_method: document.getElementById('payment-method').value,
-    subtotal: subtotal,
-    vat_rate: vatRate,
-    vat_amount: vatAmount,
-    grand_total: grandTotal,
-    notes: document.getElementById('notes').value,
-    manager: document.getElementById('manager-name').value,
+    token:            SECRET_TOKEN_CLIENT,
+    action:           currentEditInvoiceNumber ? 'update' : 'new',
+    invoice_number:   document.getElementById('invoice-number').value,
+    date:             formatDate(document.getElementById('invoice-date').value),
+    buyer_name:       document.getElementById('buyer-name').value,
+    buyer_type:       document.getElementById('buyer-type').value,
+    buyer_address:    document.getElementById('buyer-address').value,
+    buyer_contact:    document.getElementById('buyer-contact').value,
+    delivery_date:    formatDate(document.getElementById('delivery-date').value),
+    delivery_zone:    document.getElementById('delivery-zone').value === 'baku'
+                        ? 'Bakı şəhəri (Pulsuz)' : 'Bakı xarici / Rayon',
+    delivery_fee:     deliveryFee,
+    payment_method:   document.getElementById('payment-method').value,
+    payment_terms:    getPaymentTermsValue(),
+    subtotal:         subtotal,
+    vat_rate:         vatRate,
+    vat_amount:       vatAmount,
+    grand_total:      grandTotal,
+    notes:            document.getElementById('notes').value,
+    manager:          document.getElementById('manager-name').value,
     manager_position: document.getElementById('manager-position').value,
-    items_json: JSON.stringify(rows)
+    items_json:       JSON.stringify(rows)
   };
 
+  let saveOk = false;
   try {
     // Use URLSearchParams to avoid CORS preflight (simple request)
     const formData = new URLSearchParams();
@@ -1651,7 +2015,13 @@ async function handleSave() {
     });
     const data = await resp.json();
     if (data.status === 'ok') {
-      showToast('Uğurla yazıldı ✓', 'success');
+      saveOk = true;
+      if (currentEditInvoiceNumber) {
+        showToast('Uğurla yeniləndi ✓', 'success');
+        cancelEditMode();
+      } else {
+        showToast('Uğurla yazıldı ✓', 'success');
+      }
     } else {
       throw new Error(data.message || 'Server error');
     }
@@ -1663,8 +2033,8 @@ async function handleSave() {
       showToast('Xəta baş verdi. Yenidən cəhd edin. ✗', 'error');
     }
   } finally {
-    btn.innerHTML = origText;
     btn.disabled = false;
+    if (!saveOk) btn.innerHTML = origText;
   }
 }
 
@@ -1681,7 +2051,7 @@ function handleClear() {
   document.getElementById('invoice-date').value = new Date().toISOString().split('T')[0];
 
   // Clear buyer fields
-  ['buyer-name','buyer-voen','buyer-address','buyer-contact','buyer-bank','buyer-iban'].forEach(id => {
+  ['buyer-name','buyer-address','buyer-contact'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1696,7 +2066,12 @@ function handleClear() {
 
   // Clear additional fields
   document.getElementById('delivery-date').value = '';
+  document.getElementById('delivery-zone').value = 'baku';
+  document.getElementById('delivery-fee').value = '0';
   document.getElementById('payment-method').value = '';
+  document.getElementById('payment-terms').value = '';
+  document.getElementById('payment-terms-custom').value = '';
+  document.getElementById('payment-terms-custom-row').style.display = 'none';
   document.getElementById('notes').value = '';
   document.getElementById('manager-name').value = '';
   document.getElementById('manager-position').value = '';
