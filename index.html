@@ -1198,7 +1198,7 @@ let rowId = 0;
 
 // ─── Init ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Set invoice number
+  // Set local invoice number immediately (fallback), then override from server
   document.getElementById('invoice-number').value = generateInvoiceNumber();
 
   // Set today's date
@@ -1211,6 +1211,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load managers dropdown from Google Sheets
   loadManagers();
 
+  // Fetch authoritative next invoice number from server
+  loadNextInvoiceNumber();
+
   // Add first row
   addRow();
 
@@ -1222,6 +1225,18 @@ document.addEventListener('DOMContentLoaded', () => {
 function generateInvoiceNumber() {
   const year = new Date().getFullYear();
   return `INV-${year}-${String(invoiceCounter).padStart(3, '0')}`;
+}
+
+async function loadNextInvoiceNumber() {
+  try {
+    const url = `${GOOGLE_SCRIPT_URL}?action=next_number&token=${SECRET_TOKEN_CLIENT}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.status === 'ok' && data.invoice_number) {
+      document.getElementById('invoice-number').value = data.invoice_number;
+      updatePreview();
+    }
+  } catch(e) { /* silently keep local fallback number */ }
 }
 
 // ─── Seller localStorage ──────────────────────────────────────────
@@ -2045,8 +2060,9 @@ function handleClear() {
   if (!confirm('Formu təmizləmək istədiyinizdən əminsinizmi?')) return;
   invoiceCounter++;
   localStorage.setItem('mfn_invoice_counter', invoiceCounter);
-  document.getElementById('invoice-number').value = generateInvoiceNumber();
+  document.getElementById('invoice-number').value = generateInvoiceNumber(); // local fallback
   resetFormFields();
+  loadNextInvoiceNumber(); // override with server number
   showToast('Form təmizləndi', 'success');
 }
 
